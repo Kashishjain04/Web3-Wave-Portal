@@ -1,13 +1,47 @@
 import React, { useEffect, useState } from "react";
 import * as ethers from "ethers";
+import detectEthereumProvider from "@metamask/detect-provider";
 import abi from "./utils/WavePortal.json";
 import metamaskIcon from "./utils/metamask.svg";
 import Loader from "./Loader";
 
-const getEthereumObject = () => window.ethereum;
+const switchNetwork = async (provider) => {
+	try {
+		await provider.request({
+			method: "wallet_switchEthereumChain",
+			params: [
+				{
+					chainId: "0x5",
+				},
+			],
+		});
+		return true;
+	} catch (error) {
+		if (error.code === 4001) {
+			alert("Switch to Goerli Network first.");
+		}
+		return false;
+	}
+};
+
+const getEthereumObject = async () => {
+	const provider = await detectEthereumProvider();
+	if (provider !== window.ethereum) {
+		alert("Do you have multiple wallets installed!!");
+		return null;
+	}
+	if (!provider || !provider.isMetaMask) return null;
+	const chainId = await provider.request({ method: "eth_chainId" });
+	if (!(chainId === "0x5")) {
+		const switched = await switchNetwork(provider);
+		if(switched) return provider;
+		else return null;
+	}
+	return provider;
+};
 
 const findMetamaskAccount = async () => {
-	const ethereum = getEthereumObject();
+	const ethereum = await getEthereumObject();
 	if (!ethereum) {
 		console.log("Make sure you have Metamask!");
 		return null;
@@ -15,7 +49,6 @@ const findMetamaskAccount = async () => {
 	const accounts = await ethereum.request({ method: "eth_accounts" });
 	if (accounts.length) {
 		const account = accounts[0];
-		console.log("Found an authorized account:", account);
 		return account;
 	} else {
 		console.log("No authorized account found!");
@@ -24,7 +57,6 @@ const findMetamaskAccount = async () => {
 };
 
 const App = () => {
-	console.log(metamaskIcon);
 	const [currentAccount, setCurrentAccount] = useState("");
 	const [allWaves, setAllWaves] = useState([]);
 	const [message, setMessage] = useState("");
@@ -34,7 +66,7 @@ const App = () => {
 
 	const connectWallet = async () => {
 		try {
-			const ethereum = getEthereumObject();
+			const ethereum = await getEthereumObject();
 			if (!ethereum) {
 				return alert("Get Metamask!");
 			}
@@ -50,7 +82,7 @@ const App = () => {
 		e.preventDefault();
 		try {
 			setLoading(true);
-			const ethereum = getEthereumObject();
+			const ethereum = await getEthereumObject();
 			if (!ethereum) return console.log("Metamask not found!");
 			const provider = new ethers.providers.Web3Provider(ethereum);
 			const signer = provider.getSigner();
@@ -70,7 +102,8 @@ const App = () => {
 
 	const getAllWaves = async () => {
 		try {
-			const ethereum = getEthereumObject();
+			const ethereum = await getEthereumObject();
+			// console.log(ethereum);
 			if (!ethereum) return console.log("Metamask not found!");
 
 			const provider = new ethers.providers.Web3Provider(ethereum);
@@ -78,7 +111,6 @@ const App = () => {
 			const wavePortalContract = new ethers.Contract(contractAddress, contractABI, signer);
 
 			const waves = await wavePortalContract.getAllWaves();
-			console.log(waves);
 			const cleanWaves = await waves.map((wave) => {
 				return {
 					address: wave.waver,
@@ -108,7 +140,6 @@ const App = () => {
 		let wavePortalContract;
 
 		const onNewWave = (from, timestamp, message) => {
-			console.log("NewWave", from, timestamp, message);
 			setAllWaves((prev) => [
 				{ address: from, timestamp: new Date(timestamp * 1000), message },
 				...prev,
