@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import * as ethers from "ethers";
 import abi from "./utils/WavePortal.json";
+import metamaskIcon from "./utils/metamask.svg";
+import Loader from "./Loader";
 
 const getEthereumObject = () => window.ethereum;
 
@@ -22,8 +24,11 @@ const findMetamaskAccount = async () => {
 };
 
 const App = () => {
+	console.log(metamaskIcon);
 	const [currentAccount, setCurrentAccount] = useState("");
 	const [allWaves, setAllWaves] = useState([]);
+	const [message, setMessage] = useState("");
+	const [loading, setLoading] = useState(true);
 	const contractAddress = process.env.REACT_APP_SMART_CONTRACT_ADDRESS;
 	const contractABI = abi.abi;
 
@@ -34,34 +39,32 @@ const App = () => {
 				return alert("Get Metamask!");
 			}
 			const accounts = await ethereum.request({ method: "eth_requestAccounts" });
-			console.log("Connected", accounts[0]);
 			setCurrentAccount(accounts[0]);
+			getAllWaves();
 		} catch (error) {
 			console.log(error);
 		}
 	};
 
-	const wave = async () => {
+	const wave = async (e) => {
+		e.preventDefault();
 		try {
+			setLoading(true);
 			const ethereum = getEthereumObject();
 			if (!ethereum) return console.log("Metamask not found!");
 			const provider = new ethers.providers.Web3Provider(ethereum);
 			const signer = provider.getSigner();
 			const wavePortalContract = new ethers.Contract(contractAddress, contractABI, signer);
 
-			let count = await wavePortalContract.getTotalWaves();
-			console.log("Retrieved total wave count...", count.toNumber());
-
-			const waveTxn = await wavePortalContract.wave("Lorem Ipsum!", { gasLimit: 300000 });
-			console.log("Mining...", waveTxn.hash);
+			const waveTxn = await wavePortalContract.wave(message, { gasLimit: 300000 });
 
 			await waveTxn.wait();
-			console.log("Mined --", waveTxn.hash);
 
-			count = await wavePortalContract.getTotalWaves();
-			console.log("Retrieved total wave count...", count.toNumber());
+			setMessage("");
 		} catch (error) {
 			console.log(error);
+		} finally {
+			setLoading(false);
 		}
 	};
 
@@ -83,21 +86,23 @@ const App = () => {
 					message: wave.message,
 				};
 			});
-			setAllWaves(cleanWaves);
+			setAllWaves(cleanWaves.sort((a, b) => b.timestamp - a.timestamp));
 		} catch (error) {
 			console.log(error);
 		}
 	};
 
 	useEffect(() => {
+		setLoading(true);
 		findMetamaskAccount().then((account) => {
 			if (account) {
 				setCurrentAccount(account);
 				getAllWaves();
 			}
 		});
+		setLoading(false);
 		//eslint-disable-next-line
-	}, [])
+	}, []);
 
 	useEffect(() => {
 		let wavePortalContract;
@@ -105,8 +110,8 @@ const App = () => {
 		const onNewWave = (from, timestamp, message) => {
 			console.log("NewWave", from, timestamp, message);
 			setAllWaves((prev) => [
-				...prev,
 				{ address: from, timestamp: new Date(timestamp * 1000), message },
+				...prev,
 			]);
 		};
 
@@ -119,29 +124,54 @@ const App = () => {
 		}
 
 		return () => {
-			if(wavePortalContract){
+			if (wavePortalContract) {
 				wavePortalContract.off("NewWave", onNewWave);
 			}
-		}
-	}, [contractABI]);
+		};
+	}, [contractABI, contractAddress]);
 
-	return (
-		<div>
-			<button className="waveButton" onClick={wave}>
-				Wave at Me
+	return !currentAccount ? (
+		<div className="unAuth">
+			<button className="connectButton" onClick={connectWallet}>
+				<img src={metamaskIcon} alt="metamask" />
+				<p>Connect Wallet</p>
 			</button>
-			{!currentAccount && (
-				<button className="waveButton" onClick={connectWallet}>
-					Connect Wallet
+		</div>
+	) : (
+		<div className="app">
+			{loading && <Loader />}
+			<div className="intro">
+				<p>Hi There,</p>
+				<h3>I am Kashish Jain</h3>
+				<p>
+					Visit me at:{" "}
+					<a target="_blank" rel="noopener noreferrer" href="https://kashishjain.tech">
+						kashishjain.tech
+					</a>
+				</p>
+			</div>
+			<form onSubmit={wave} className="waveButtonParent">
+				<input
+					required
+					type="text"
+					name="message"
+					placeholder="Write a message..."
+					value={message}
+					onChange={(e) => setMessage(e.target.value)}
+				/>
+				<button type="submit" className="waveButton">
+					👋🏻 &nbsp; Wave at Me
 				</button>
-			)}
-			{allWaves.map((wave, i) => (
-				<div key={i} style={{ backgroundColor: "OldLace", marginTop: "16px", padding: "8px" }}>
-					<div>Address: {wave.address}</div>
-					<div>Time: {wave.timestamp.toString()}</div>
-					<div>Message: {wave.message}</div>
-				</div>
-			))}
+			</form>
+			<div className="waveList">
+				{allWaves.map((wave, i) => (
+					<div key={i} className="waveCard">
+						<div className="wave__address">{wave.address}</div>
+						<div className="wave__time">{new Date(wave.timestamp).toLocaleString()}</div>
+						<div className="wave__message">{wave.message}</div>
+					</div>
+				))}
+			</div>
 		</div>
 	);
 };
