@@ -103,7 +103,6 @@ const App = () => {
 	const getAllWaves = async () => {
 		try {
 			const ethereum = await getEthereumObject();
-			// console.log(ethereum);
 			if (!ethereum) return console.log("Metamask not found!");
 
 			const provider = new ethers.providers.Web3Provider(ethereum);
@@ -145,14 +144,17 @@ const App = () => {
 				...prev,
 			]);
 		};
-
-		if (window.ethereum) {
-			const provider = new ethers.providers.Web3Provider(window.ethereum);
+		const newWaveListener = async () => {
+			const ethereum = await getEthereumObject();
+			if (!ethereum) return console.log("Metamask not found!");
+			const provider = new ethers.providers.Web3Provider(ethereum);
 			const signer = provider.getSigner();
 
 			wavePortalContract = new ethers.Contract(contractAddress, contractABI, signer);
 			wavePortalContract.on("NewWave", onNewWave);
 		}
+
+		newWaveListener();
 
 		return () => {
 			if (wavePortalContract) {
